@@ -1,10 +1,12 @@
 import requests as rq
 import sys
+import os
 
 
 class JiraConnector(object):
     def __init__(self, password):
-        self.base = r'https://jira.warta.pl/'
+        self.base = os.environ['JIRA_BASE']
+        self.user = os.environ['JIRA_USER']
 
         from requests.packages.urllib3.exceptions import InsecurePlatformWarning, InsecureRequestWarning, SNIMissingWarning
         from requests.packages.urllib3 import disable_warnings
@@ -18,7 +20,7 @@ class JiraConnector(object):
     def prep_cookie(self, password):
         url = self.base + r'rest/auth/1/session'
         headers = {'Content-Type': 'application/json'}
-        payload = '{"username":"iz-tech-user","password":"%s"}' % password
+        payload = '{"username":"%s","password":"%s"}' % (self.user, password)
 
         r = rq.post(url, data=payload, headers=headers, verify=False)
         assert r.status_code == 200, 'Auth request failed!'
