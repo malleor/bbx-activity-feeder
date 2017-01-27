@@ -1,16 +1,19 @@
 from jira import JiraConnector
-import os
-import sys
 from apscheduler.schedulers.blocking import BlockingScheduler
 from jira_feeds import *
 from elastic import BonsaiStorage
+import logging
+import json
+import os
 
 
 class Scheduler(BlockingScheduler):
-    def schedule(self, job, jira, **trigger_args):
-        name = job.func_name
-        return self.add_job(job, args=(jira,), trigger='interval', id=name, name=name, **trigger_args)
+    def schedule(self, job, jira, storage, **trigger_args):
+        name = str(job)
+        return self.add_job(job, args=(jira, storage), trigger='interval', id=name, name=name, **trigger_args)
 
+
+logging.basicConfig()
 
 if __name__ == '__main__':
     # greetings
@@ -22,11 +25,13 @@ if __name__ == '__main__':
     scheduler = Scheduler()
     storage = BonsaiStorage()
 
+    # prep the feeders
+    created_pace = json.loads(os.environ['CREATED_PACE'])
     feeders = [
-        scheduler.schedule(get_todays_issues, jira, seconds=20)
+        scheduler.schedule(CreatedIssuesFeed(), jira, storage, **created_pace)
     ]
 
-    print 'configured feeders:  ', ', '.join([f.name for f in feeders])
+    print 'Configured feeders:', '\n  '.join([''] + [f.name for f in feeders])
     print 'starting the scheduler'
     sys.stdout.flush()
     scheduler.start()
