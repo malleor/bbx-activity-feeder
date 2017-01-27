@@ -35,6 +35,7 @@ class CreatedIssuesFeed(object):
         now = datetime.now().strftime('%Y-%m-%d %H:%M')
         if self.last_called is None:
             print 'dry run at', now
+            sys.stdout.flush()
             self.last_called = now
             return
 
@@ -52,16 +53,28 @@ class CreatedIssuesFeed(object):
         sys.stdout.flush()
 
         # store the issues
-        for jira_issue in issues:
+        erroneous_issues = []
+        n = len(issues) - 1
+        BAR_LENGTH = 30
+        for i, jira_issue in enumerate(issues):
             # convert
             issue = CreatedIssuesFeed.Issue(jira_issue)
 
             # store
             res = storage.put(self.index, self.type, issue.issue_key, issue)
-            if res is not None:
-                print 'commited the issue', issue.issue_key, 'to the datastore'
-            else:
-                print 'ERROR committing the issue', issue.issue_key
+            if res is None:
+                erroneous_issues.append(issue.issue_key)
+
+            # log progress
+            if (i * 100 / n) % 10 == 0:
+                u = i * BAR_LENGTH / n
+                v = BAR_LENGTH + 1 - u
+                print '|' + u * '=' + '>' + v * ' ' + '|'
+                sys.stdout.flush()
+        print 'stored', len(issues), 'issues'
+        if len(erroneous_issues) > 0:
+            print len(erroneous_issues), 'FAILED:', '\n  '.join([''] + erroneous_issues)
+        sys.stdout.flush()
 
         self.last_called = now
 
