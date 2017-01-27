@@ -2,43 +2,32 @@ from jira import JiraConnector
 import os
 import sys
 from apscheduler.schedulers.blocking import BlockingScheduler
+from jira_feeds import *
 
 
-class Feeder(object):
-    def __init__(self, data_source, scheduler, job, sched_args):
-        self.name = job_name = job.func_name
-
-        @scheduler.scheduled_job('interval', **sched_args)
-        def job_wrapper():
-            print 'running a scheduled job', job_name
-            sys.stdout.flush()
-            job(data_source)
-            sys.stdout.flush()
+class Scheduler(BlockingScheduler):
+    def schedule(self, job, jira, **trigger_args):
+        name = job.func_name
+        return self.add_job(job, args=(jira,), trigger='interval', id=name, name=name, **trigger_args)
 
 
-def get_todays_issues(jira):
-    issues = jira.get_issues('project=BlueBox and created>=startOfDay()', verbose=True)
-    print 'DONE:', len(issues), 'issues'
+if __name__ == '__main__':
+    # greetings
+    print 'hello there'
+    sys.stdout.flush()
 
+    # prep components
+    jira = JiraConnector()
+    scheduler = Scheduler()
 
-print 'hello there'
-sys.stdout.flush()
+    feeders = [
+        scheduler.schedule(get_todays_issues, jira, seconds=20)
+    ]
 
-assert 'JIRA_PASS' in os.environ, 'I need JIRA_PASS in the environment to access Jira'
-JIRA_PASS = os.environ['JIRA_PASS']
+    print 'configured feeders:  ', ', '.join([f.name for f in feeders])
+    print 'starting the scheduler'
+    sys.stdout.flush()
+    scheduler.start()
 
-
-jira = JiraConnector(JIRA_PASS)
-scheduler = BlockingScheduler()
-
-feeders = [
-    Feeder(jira, scheduler, get_todays_issues, {'seconds': 20})
-]
-
-print 'configured feeders:  ', ', '.join([f.name for f in feeders])
-print 'starting the scheduler'
-sys.stdout.flush()
-scheduler.start()
-
-print 'application is done'
-sys.stdout.flush()
+    print 'application is done'
+    sys.stdout.flush()
