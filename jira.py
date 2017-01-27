@@ -19,6 +19,9 @@ class JiraConnector(object):
         cookie = self.prep_cookie(password)
         self.headers = {'Content-Type': 'application/json', 'Cookie': cookie}
 
+        print 'Jira connector online'
+        print '  address:', self.base
+
     def prep_cookie(self, password):
         url = self.base + r'rest/auth/1/session'
         headers = {'Content-Type': 'application/json'}

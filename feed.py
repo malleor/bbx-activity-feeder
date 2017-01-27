@@ -3,6 +3,7 @@ import os
 import sys
 from apscheduler.schedulers.blocking import BlockingScheduler
 from jira_feeds import *
+from elastic import BonsaiStorage
 
 
 class Scheduler(BlockingScheduler):
@@ -19,6 +20,7 @@ if __name__ == '__main__':
     # prep components
     jira = JiraConnector()
     scheduler = Scheduler()
+    storage = BonsaiStorage()
 
     feeders = [
         scheduler.schedule(get_todays_issues, jira, seconds=20)
