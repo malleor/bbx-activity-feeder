@@ -8,7 +8,8 @@ class JiraConnector(object):
     def __init__(self):
         self.base = os.environ['JIRA_BASE']
         self.user = os.environ['JIRA_USER']
-        password = os.environ['JIRA_PASS']
+        self.password = os.environ['JIRA_PASS']
+        self.headers = None
 
         from requests.packages.urllib3.exceptions import InsecurePlatformWarning, InsecureRequestWarning, SNIMissingWarning
         from requests.packages.urllib3 import disable_warnings
@@ -16,16 +17,14 @@ class JiraConnector(object):
         disable_warnings(InsecureRequestWarning)
         disable_warnings(SNIMissingWarning)
 
-        cookie = self.prep_cookie(password)
-        self.headers = {'Content-Type': 'application/json', 'Cookie': cookie}
-
+        self.auth()
         print 'Jira connector online'
         print '  address:', self.base
 
-    def prep_cookie(self, password):
+    def auth(self):
         url = self.base + r'rest/auth/1/session'
         headers = {'Content-Type': 'application/json'}
-        payload = json.dumps({"username": self.user, "password": password})
+        payload = json.dumps({"username": self.user, "password": self.password})
 
         r = rq.post(url, data=payload, headers=headers, verify=False)
         assert r.status_code == 200, 'Auth request failed!'
@@ -33,20 +32,24 @@ class JiraConnector(object):
         session = r.json()['session']
         cookie = session['name'] + '=' + session['value']
 
-        return cookie
+        self.headers = {'Content-Type': 'application/json', 'Cookie': cookie}
 
     def get(self, api, params=None, payload=None):
+        self.auth()
+
         r = rq.get(self.base + 'rest/api/2/' + api,
                    headers=self.headers,
                    params=params,
                    data=payload,
                    verify=False)
+
         if r.status_code not in (200, 201):
             print 'GET request to %s failed!' % api
             try:
-                print '  problem: ', r.json()
+                print '  [%s] problem: ' % r.status_code, r.json()
             except:
-                print '  problem: ', r.text.encode('utf-8')
+                print r.text.encode('utf-8')
+
             return None
         else:
             return r.json()
@@ -68,6 +71,9 @@ class JiraConnector(object):
 
         # fetch a batch of issues
         result = self.get('search', params=params)
+        if result is None:
+            print 'failed to fetch issues'
+            return []
         total = result['total']
         issues = result['issues']
         if verbose:
@@ -78,6 +84,9 @@ class JiraConnector(object):
         while len(issues) < total:
             params['startAt'] = len(issues)
             result = self.get('search', params=params)
+            if result is None:
+                print 'failed to fetch issues'
+                return []
             issues += result['issues']
             if verbose:
                 print 'fetched %d of %d issues' % (len(issues), total)
