@@ -46,7 +46,7 @@ class JiraConnector(object):
             try:
                 print '  problem: ', r.json()
             except:
-                print '  problem: ', r.text
+                print '  problem: ', r.text.encode('utf-8')
             return None
         else:
             return r.json()

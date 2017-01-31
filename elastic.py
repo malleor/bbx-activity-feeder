@@ -56,3 +56,15 @@ class BonsaiStorage(object):
             return None
         else:
             return r.json()
+
+    def field_stats(self, index, field):
+        # fetch stats
+        url = '/'.join([self.base_url, index, '_field_stats?fields=' + field])
+        r = rq.get(url)
+        ans = self._unpack_response(r)
+        if ans is None:
+            return None
+
+        # unpack it
+        stats = ans['indices']['_all']['fields']
+        return stats[field] if field in stats else None

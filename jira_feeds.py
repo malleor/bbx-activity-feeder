@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime
+import time
 
 
 PROJECT_NAME = os.environ['JIRA_PROJECT']
@@ -8,7 +9,6 @@ PROJECT_NAME = os.environ['JIRA_PROJECT']
 
 class CreatedIssuesFeed(object):
     def __init__(self):
-        self.last_called = None
         self.index = PROJECT_NAME.lower()
         self.type = 'created'
 
@@ -27,26 +27,31 @@ class CreatedIssuesFeed(object):
 
     class Issue(object):
         def __init__(self, jira_issue):
-            self.created = jira_issue['fields']['created']
+            created_str = jira_issue['fields']['created'][:-5]
+            created_date = datetime.strptime(created_str, '%Y-%m-%dT%H:%M:%S.%f')
+            created_epoch = 1000*int(time.mktime(created_date.timetuple()))
+
+            self.created = created_epoch
             self.issue_key = jira_issue['key']
 
     def __call__(self, jira, storage):
-        # check the clock
-        now = datetime.now().strftime('%Y-%m-%d %H:%M')
-        if self.last_called is None:
-            print 'dry run at', now
-            sys.stdout.flush()
-            self.last_called = now
-            return
-
         # assert that the storage is ready for receiving docs
         if not storage.assert_mapping(self.index, self.mapping):
             print 'mapping not set; dropping the feed'
             sys.stdout.flush()
             return
 
+        # check since when should the issues be fetched
+        stats = storage.field_stats(self.index, 'created')
+        if stats:
+            last_created = datetime.fromtimestamp(stats['max_value'] / 1000).strftime('"%Y-%m-%d %H:%M"')
+            print 'the freshest issue was created', last_created
+        else:
+            last_created = "startOfDay()"
+            print 'could not fetch stats from the storage; using', last_created
+
         # fetch issues
-        issues = jira.get_issues('project=%s and created>="%s"' % (PROJECT_NAME, self.last_called),
+        issues = jira.get_issues('project=%s and created>=%s' % (PROJECT_NAME, last_created),
                                  fields=('created',),
                                  verbose=True)
         print 'got', len(issues), 'issues'
@@ -55,27 +60,28 @@ class CreatedIssuesFeed(object):
         # store the issues
         erroneous_issues = []
         n = len(issues) - 1
-        BAR_LENGTH = 30
-        for i, jira_issue in enumerate(issues):
-            # convert
-            issue = CreatedIssuesFeed.Issue(jira_issue)
+        if n >= 0:
+            if n == 0:
+                n = 1
+            BAR_LENGTH = 30
+            for i, jira_issue in enumerate(issues):
+                # convert
+                issue = CreatedIssuesFeed.Issue(jira_issue)
 
-            # store
-            res = storage.put(self.index, self.type, issue.issue_key, issue)
-            if res is None:
-                erroneous_issues.append(issue.issue_key)
+                # store
+                res = storage.put(self.index, self.type, issue.issue_key, issue)
+                if res is None:
+                    erroneous_issues.append(issue.issue_key)
 
-            # log progress
-            if (i * 100 / n) % 10 == 0:
-                u = i * BAR_LENGTH / n
-                v = BAR_LENGTH + 1 - u
-                print '|' + u * '=' + '>' + v * ' ' + '|'
-                sys.stdout.flush()
-        print 'stored', len(issues), 'issues'
-        if len(erroneous_issues) > 0:
-            print len(erroneous_issues), 'FAILED:', '\n  '.join([''] + erroneous_issues)
-        sys.stdout.flush()
-
-        self.last_called = now
+                # log progress
+                if (i * 100 / n) % 10 == 0:
+                    u = i * BAR_LENGTH / n
+                    v = BAR_LENGTH + 1 - u
+                    print '|' + u * '=' + '>' + v * ' ' + '|'
+                    sys.stdout.flush()
+            print 'stored', len(issues), 'issues'
+            if len(erroneous_issues) > 0:
+                print len(erroneous_issues), 'FAILED:', '\n  '.join([''] + erroneous_issues)
+            sys.stdout.flush()
 
 # def
