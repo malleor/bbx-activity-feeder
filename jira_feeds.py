@@ -10,9 +10,9 @@ PROJECT_NAME = os.environ['JIRA_PROJECT']
 class CreatedIssuesFeed(object):
     def __init__(self):
         self.index = PROJECT_NAME.lower()
-        self.type = 'created'
+        self.type = 'created8'
 
-        self.mapping = {
+        self.ELASTIC_MAPPING = {
             self.type: {
                 'properties': {
                     'created': {
@@ -20,23 +20,36 @@ class CreatedIssuesFeed(object):
                     },
                     'issue_key': {
                         'type': 'string'
+                    },
+                    'channel': {
+                        'type': 'string'
+                    },
+                    'biz': {
+                        'type': 'string'
                     }
                 }
             }
         }
+        self.JIRA_MAPPING = {
+            'channel': 'customfield_10760',
+            'biz': 'customfield_10715'
+        }
 
     class Issue(object):
-        def __init__(self, jira_issue):
-            created_str = jira_issue['fields']['created'][:-5]
+        def __init__(self, jira_issue, mapping):
+            jira_fields = jira_issue['fields']
+            created_str = jira_fields['created'][:-5]
             created_date = datetime.strptime(created_str, '%Y-%m-%dT%H:%M:%S.%f')
             created_epoch = 1000*int(time.mktime(created_date.timetuple()))
 
             self.created = created_epoch
             self.issue_key = jira_issue['key']
+            self.biz = jira_fields[mapping['biz']]
+            self.channel = jira_fields[mapping['channel']]
 
     def __call__(self, jira, storage):
         # assert that the storage is ready for receiving docs
-        if not storage.assert_mapping(self.index, self.mapping):
+        if not storage.assert_mapping(self.index, self.ELASTIC_MAPPING):
             print 'mapping not set; dropping the feed'
             sys.stdout.flush()
             return
@@ -51,8 +64,8 @@ class CreatedIssuesFeed(object):
             print 'could not fetch stats from the storage; using', last_created
 
         # fetch issues
-        issues = jira.get_issues('project=%s and created>=%s' % (PROJECT_NAME, last_created),
-                                 fields=('created',),
+        issues = jira.get_issues('project=%s and created>=%s order by created asc' % (PROJECT_NAME, last_created),
+                                 fields=['created'] + self.JIRA_MAPPING.values(),
                                  verbose=True)
         print 'got', len(issues), 'issues'
         sys.stdout.flush()
@@ -66,7 +79,7 @@ class CreatedIssuesFeed(object):
             BAR_LENGTH = 30
             for i, jira_issue in enumerate(issues):
                 # convert
-                issue = CreatedIssuesFeed.Issue(jira_issue)
+                issue = CreatedIssuesFeed.Issue(jira_issue, self.JIRA_MAPPING)
 
                 # store
                 res = storage.put(self.index, self.type, issue.issue_key, issue)
