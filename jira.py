@@ -20,6 +20,7 @@ class JiraConnector(object):
         self.auth()
         print 'Jira connector online'
         print '  address:', self.base
+        sys.stdout.flush()
 
     def auth(self):
         url = self.base + r'rest/auth/1/session'

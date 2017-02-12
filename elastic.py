@@ -18,27 +18,36 @@ class BonsaiStorage(object):
     def put(self, index, type, id, obj):
         # form a request
         url = '/'.join([self.base_url, index, type, id])
-        doc = json.dumps(obj.__dict__)
+        obj = obj if obj.__class__ == dict else obj.__dict__
+        try:
+            doc = json.dumps(obj)
+        except UnicodeDecodeError:
+            print 'Failed to put object:', obj
+            sys.stdout.flush()
+            return None
 
         # commit
         r = rq.put(url, data=doc)
         return self._unpack_response(r)
 
-    def assert_mapping(self, index, mapping):
-        # check if the mapping is there
+    def assert_mapping(self, index, type, mapping):
+        # check if the index is there
         url = '/'.join([self.base_url, index, '_mapping'])
         r = rq.get(url)
-        if r.status_code < 300:
-            return True
-        if r.status_code != 404:
-            print r.json()
-            return False
+        if r.status_code == 404:
+            print 'creating the index...'
+            url = '/'.join([self.base_url, index])
+            r = rq.put(url)
+            if r.status_code >= 300:
+                print 'FAILED'
+                return False
+            print 'created'
 
         # set up the mapping
-        print 'putting a mapping for index', index, '...'
+        print 'putting a mapping for %s/%s...' % (index, type)
         sys.stdout.flush()
-        url = '/'.join([self.base_url, index])
-        r = rq.put(url, json.dumps({'mappings': mapping}))
+        url = '/'.join([self.base_url, index, '_mapping', type])
+        r = rq.put(url, json.dumps(mapping))
         success = self._unpack_response(r) is not None
         print 'OK' if success else 'FAILED!'
         sys.stdout.flush()

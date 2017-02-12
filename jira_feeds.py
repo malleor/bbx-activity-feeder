@@ -49,7 +49,7 @@ class CreatedIssuesFeed(object):
 
     def __call__(self, jira, storage):
         # assert that the storage is ready for receiving docs
-        if not storage.assert_mapping(self.index, self.ELASTIC_MAPPING):
+        if not storage.assert_mapping(self.index, self.type, self.ELASTIC_MAPPING):
             print 'mapping not set; dropping the feed'
             sys.stdout.flush()
             return
