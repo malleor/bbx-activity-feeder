@@ -46,3 +46,14 @@ class OctopusConnector(object):
         d = [dict(zip(cols, x)) for x in d]
 
         return d
+
+    def get_clusters(self):
+        c = self.db.cursor()
+
+        c.execute('''select * from cluster''')
+        d = c.fetchall()
+
+        cols = [x[0] for x in c.description]
+        d = [dict(zip(cols, x)) for x in d]
+
+        return d

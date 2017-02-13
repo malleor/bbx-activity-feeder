@@ -20,9 +20,9 @@ class BonsaiStorage(object):
         url = '/'.join([self.base_url, index, type, id])
         obj = obj if obj.__class__ == dict else obj.__dict__
         try:
-            doc = json.dumps(obj)
+            doc = json.dumps(obj, encoding='unicode_escape')
         except UnicodeDecodeError:
-            print 'Failed to put object:', obj
+            print 'Failed to serialize object:', obj, '(encoding problems)'
             sys.stdout.flush()
             return None
 
@@ -34,14 +34,8 @@ class BonsaiStorage(object):
         # check if the index is there
         url = '/'.join([self.base_url, index, '_mapping'])
         r = rq.get(url)
-        if r.status_code == 404:
-            print 'creating the index...'
-            url = '/'.join([self.base_url, index])
-            r = rq.put(url)
-            if r.status_code >= 300:
-                print 'FAILED'
-                return False
-            print 'created'
+        if r.status_code == 404 and not self._create_index(index):
+            return False
 
         # set up the mapping
         print 'putting a mapping for %s/%s...' % (index, type)
@@ -53,6 +47,52 @@ class BonsaiStorage(object):
         sys.stdout.flush()
 
         return success
+
+    def assert_settings(self, index, settings):
+        # check if the index is there
+        r = rq.get('/'.join([self.base_url, index, '_settings']))
+        if r.status_code == 404 and not self._create_index(index):
+            return False
+
+        print 'putting settings for %s...' % index
+        sys.stdout.flush()
+
+        # close the index for a moment
+        r = rq.post('/'.join([self.base_url, index, '_close']))
+        if self._unpack_response(r) is None:
+            print 'failed to _close the index!'
+            sys.stdout.flush()
+            return False
+
+        # update settings
+        r = rq.put('/'.join([self.base_url, index, '_settings']), json.dumps(settings))
+        success = self._unpack_response(r) is not None
+        print 'OK' if success else 'FAILED!'
+        sys.stdout.flush()
+
+        # reopen the index
+        r = rq.post('/'.join([self.base_url, index, '_open']))
+        if self._unpack_response(r) is None:
+            print 'failed to _open the index!'
+            sys.stdout.flush()
+            return False
+
+        print 'OK'
+        sys.stdout.flush()
+
+        return success
+
+    def _create_index(self, index):
+        print 'creating the index...'
+        url = '/'.join([self.base_url, index])
+        r = rq.put(url)
+        if r.status_code >= 300:
+            print 'FAILED'
+            sys.stdout.flush()
+            return False
+        print 'created'
+        sys.stdout.flush()
+        return True
 
     def _unpack_response(self, r):
         if r.status_code not in (200, 201):
