@@ -2,7 +2,6 @@
 import sys
 import time
 
-
 ELASTIC_SETTINGS = {
     "index": {
         "analysis": {
@@ -25,15 +24,16 @@ class Cluster(object):
 
 class Service(object):
     def __init__(self, s, cluster_names):
-        self.id             = s[Service.OCTOPUS_MAPPING['id']]
-        self.name           = s[Service.OCTOPUS_MAPPING['name']]
-        self.description    = s[Service.OCTOPUS_MAPPING['description']]
-        self.type           = s[Service.OCTOPUS_MAPPING['type']]
-        self.created        = 1000*int(time.mktime(s[Service.OCTOPUS_MAPPING['created']].timetuple()))
-        self.updated        = 1000*int(time.mktime(s[Service.OCTOPUS_MAPPING['updated']].timetuple()))
-        self.author         = s[Service.OCTOPUS_MAPPING['author']]
-        self.cluster        = cluster_names[s[Service.OCTOPUS_MAPPING['cluster']]]
-        self.repo           = s[Service.OCTOPUS_MAPPING['repo']]
+        self.id = s[Service.OCTOPUS_MAPPING['id']]
+        self.name = s[Service.OCTOPUS_MAPPING['name']]
+        self.description = s[Service.OCTOPUS_MAPPING['description']]
+        self.type = s[Service.OCTOPUS_MAPPING['type']]
+        self.created = 1000 * int(time.mktime(s[Service.OCTOPUS_MAPPING['created']].timetuple()))
+        self.updated = 1000 * int(time.mktime(s[Service.OCTOPUS_MAPPING['updated']].timetuple()))
+        self.author = s[Service.OCTOPUS_MAPPING['author']]
+        self.cluster = cluster_names[s[Service.OCTOPUS_MAPPING['cluster']]]
+        self.repo = s[Service.OCTOPUS_MAPPING['repo']]
+        self.manual = s[Service.OCTOPUS_MAPPING['manual']]
 
     ELASTIC_MAPPING = {
         'properties': {
@@ -52,6 +52,9 @@ class Service(object):
             'author': {
                 'type': 'long'
             },
+            'manual': {
+                'type': 'long'
+            },
         }
     }
 
@@ -64,22 +67,24 @@ class Service(object):
         'updated': 'date_update',
         'author': 'author',
         'cluster': 'id_cluster',
-        'repo': 'url_repository'
+        'repo': 'url_repository',
+        'manual': 'avg_manual_time'
     }
 
 
 class Execution(object):
-    def __init__(self, e, service_names):
-        self.id             = e[Execution.OCTOPUS_MAPPING['id']]
-        self.service        = service_names[e[Execution.OCTOPUS_MAPPING['service']]]
+    def __init__(self, e, service_names, service_manual_times):
+        self.id = e[Execution.OCTOPUS_MAPPING['id']]
+        self.service = service_names[e[Execution.OCTOPUS_MAPPING['service']]]
+        self.manual = service_manual_times[e[Execution.OCTOPUS_MAPPING['service']]]
 
-        self.created        = 1000*int(time.mktime(e[Execution.OCTOPUS_MAPPING['created']].timetuple()))
-        self.started        = 1000*int(time.mktime(e[Execution.OCTOPUS_MAPPING['started']].timetuple()))
-        self.finished       = 1000*int(time.mktime(e[Execution.OCTOPUS_MAPPING['finished']].timetuple()))
-        # self.result         = s[ExecutionsFeed.OCTOPUS_MAPPING['result']]
-        self.status         = Execution.OCTOPUS_STATUSES[e[Execution.OCTOPUS_MAPPING['status']]]['text']
-        self.statustype     = Execution.OCTOPUS_STATUSES[e[Execution.OCTOPUS_MAPPING['status']]]['class']
-        self.token          = e[Execution.OCTOPUS_MAPPING['token']]
+        self.created = 1000 * int(time.mktime(e[Execution.OCTOPUS_MAPPING['created']].timetuple()))
+        self.started = 1000 * int(time.mktime(e[Execution.OCTOPUS_MAPPING['started']].timetuple()))
+        self.finished = 1000 * int(time.mktime(e[Execution.OCTOPUS_MAPPING['finished']].timetuple()))
+        # self.result = s[ExecutionsFeed.OCTOPUS_MAPPING['result']]
+        self.status = Execution.OCTOPUS_STATUSES[e[Execution.OCTOPUS_MAPPING['status']]]['text']
+        self.statustype = Execution.OCTOPUS_STATUSES[e[Execution.OCTOPUS_MAPPING['status']]]['class']
+        self.token = e[Execution.OCTOPUS_MAPPING['token']]
 
     ELASTIC_MAPPING = {
         'properties': {
@@ -98,6 +103,9 @@ class Execution(object):
             'finished': {
                 'type': 'date'
             },
+            'manual': {
+                'type': 'long'
+            },
         }
     }
 
@@ -113,12 +121,12 @@ class Execution(object):
     }
 
     OCTOPUS_STATUSES = {
-           0: {'class': 'default', 'text': 'Oczekuje'},
-           1: {'class': 'success', 'text': 'Zakończony'},
-           2: {'class': 'danger',  'text': 'Błąd'},
-           3: {'class': 'warning', 'text': 'Do sprawdzenia'},
-           4: {'class': 'warning', 'text': 'Przerwany'},
-           5: {'class': 'warning', 'text': 'W trakcie realizacji'}
+        0: {'class': 'default', 'text': 'Oczekuje'},
+        1: {'class': 'success', 'text': 'Zakończony'},
+        2: {'class': 'danger', 'text': 'Błąd'},
+        3: {'class': 'warning', 'text': 'Do sprawdzenia'},
+        4: {'class': 'warning', 'text': 'Przerwany'},
+        5: {'class': 'warning', 'text': 'W trakcie realizacji'}
     }
 
 
@@ -169,6 +177,7 @@ class ServicesFeed(object):
 class ExecutionsFeed(object):
     def __init__(self):
         self.service_names = None
+        self.service_manual_times = None
 
     INDEX = 'octopus'
     TYPE = 'exec'
@@ -188,9 +197,14 @@ class ExecutionsFeed(object):
             return
 
         # fetch services
-        if self.service_names is None:
+        if self.service_names is None or self.service_manual_times is None:
             services = octopus.get_services()
-            self.service_names = dict([(s[Service.OCTOPUS_MAPPING['id']], s[Service.OCTOPUS_MAPPING['name']]) for s in services])
+
+            def fetch(service, field):
+                return service[Service.OCTOPUS_MAPPING['id']], service[Service.OCTOPUS_MAPPING[field]]
+
+            self.service_names = dict([fetch(s, 'name') for s in services])
+            self.service_manual_times = dict([fetch(s, 'manual') for s in services])
 
         # fetch executions
         executions = octopus.get_executions()
@@ -198,7 +212,7 @@ class ExecutionsFeed(object):
         sys.stdout.flush()
 
         # convert executions
-        executions = [Execution(e, self.service_names) for e in executions]
+        executions = [Execution(e, self.service_names, self.service_manual_times) for e in executions]
 
         # push to the storage
         n = len(executions)
