@@ -1,6 +1,10 @@
 # coding=utf-8
+import os
 import sys
 import time
+import random
+import datetime
+
 
 ELASTIC_SETTINGS = {
     "index": {
@@ -121,12 +125,12 @@ class Execution(object):
     }
 
     OCTOPUS_STATUSES = {
-        0: {'class': 'default', 'text': 'Oczekuje'},
-        1: {'class': 'success', 'text': 'Zakończony'},
-        2: {'class': 'danger', 'text': 'Błąd'},
-        3: {'class': 'warning', 'text': 'Do sprawdzenia'},
-        4: {'class': 'warning', 'text': 'Przerwany'},
-        5: {'class': 'warning', 'text': 'W trakcie realizacji'}
+        0: {'class': 'default', 'text': u'Oczekuje'},
+        1: {'class': 'success', 'text': u'Zakończony'},
+        2: {'class': 'danger', 'text': u'Błąd'},
+        3: {'class': 'warning', 'text': u'Do sprawdzenia'},
+        4: {'class': 'warning', 'text': u'Przerwany'},
+        5: {'class': 'warning', 'text': u'W trakcie realizacji'}
     }
 
 
@@ -228,3 +232,78 @@ class ExecutionsFeed(object):
 
         print 'ExecutionsFeed end'
         sys.stdout.flush()
+
+
+class FakeDataSource(object):
+    def __init__(self, octopus):
+        # fetch real clusters
+        self.clusters = octopus.get_clusters()
+        cluster_ids = [c[Cluster.OCTOPUS_MAPPING['id']] for c in self.clusters]
+
+        # generate fake services
+        DEMO_NUM_SERVICES = int(os.environ['DEMO_NUM_SERVICES'])
+        SERVICE_TIMEBOX = (datetime.datetime.now() - datetime.timedelta(weeks=8), datetime.datetime.now())
+        self.services = [self._gen_service(1+i, SERVICE_TIMEBOX[0], SERVICE_TIMEBOX[1], cluster_ids) for i in range(DEMO_NUM_SERVICES)]
+
+        # generate fake executions
+        DEMO_NUM_EXECUTIONS = int(os.environ['DEMO_NUM_EXECUTIONS'])
+        self.executions = [self._gen_execution(1+i, self.services) for i in range(DEMO_NUM_EXECUTIONS)]
+
+    def _gen_service(self, id, created_beg,  created_end, cluster_ids):
+        # pick a date
+        timebox = (created_end - created_beg).total_seconds()
+        created = created_beg + datetime.timedelta(seconds=random.uniform(0, timebox))
+
+        # pick a cluster
+        cluster = cluster_ids[random.randint(0, len(cluster_ids)-1)]
+
+        # come up with an execution time
+        manual_time = random.randint(1, 5*60)  # seconds
+
+        # form a result
+        return {
+            'id': -id,
+            'title': 'Demo service #%s' % id,
+            'description': 'Fake service for demo purposes',
+            'id_type': 42,
+            'date_created': created,
+            'date_update': created,
+            'author': 42,
+            'id_cluster': cluster,
+            'url_repository': '',
+            'avg_manual_time': manual_time
+        }
+
+    def _gen_execution(self, id, services):
+        # pick a service
+        service = services[random.randint(0, len(services)-1)]
+
+        # come up with timing
+        manual = service['avg_manual_time']
+        exec_time = random.uniform(manual * .3, manual * .7)
+        wait_time = random.uniform(exec_time * .2, exec_time * 2.)
+        timebox = (datetime.datetime.now() - service['date_created']).total_seconds()
+        created = service['date_created'] + datetime.timedelta(seconds=random.uniform(0, timebox))
+        started = created + datetime.timedelta(seconds=wait_time)
+        finished = started + datetime.timedelta(seconds=exec_time)
+
+        # form a result
+        return {
+            'id': -id,
+            'id_service': service['id'],
+            'date_add': created,
+            'date_beg_processing': started,
+            'date_end_processing': finished,
+            'result': '',
+            'status': 1,
+            'token': ''
+        }
+
+    def get_services(self):
+        return self.services
+
+    def get_executions(self):
+        return self.executions
+
+    def get_clusters(self):
+        return self.clusters

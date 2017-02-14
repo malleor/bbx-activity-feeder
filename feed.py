@@ -39,6 +39,11 @@ if __name__ == '__main__':
         scheduler.schedule(octopus_feeds.ExecutionsFeed(), octopus, storage, **octopus_executions_pace)
     ]
 
+    # run data initializers
+    fake_datasource = octopus_feeds.FakeDataSource(octopus)
+    octopus_feeds.ServicesFeed()(fake_datasource, storage)
+    octopus_feeds.ExecutionsFeed()(fake_datasource, storage)
+
     print 'Configured feeders:', '\n  '.join([''] + [f.name for f in feeders])
     print 'starting the scheduler'
     sys.stdout.flush()
