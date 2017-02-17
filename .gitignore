@@ -44,3 +44,5 @@ fabric.properties
 # python specific
 *.pyc
 *.pyd
+
+env.list

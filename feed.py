@@ -40,9 +40,11 @@ if __name__ == '__main__':
     ]
 
     # run data initializers
-    fake_datasource = octopus_feeds.FakeDataSource(octopus)
-    octopus_feeds.ServicesFeed()(fake_datasource, storage)
-    octopus_feeds.ExecutionsFeed()(fake_datasource, storage)
+    # fake_datasource = octopus_feeds.FakeDataSource(octopus)
+    # octopus_feeds.ServicesFeed()(fake_datasource, storage)
+    # octopus_feeds.ExecutionsFeed()(fake_datasource, storage)
+    for day in range(0, -7, -1):
+        jira_feeds.IssueActivityFeed()(jira, storage, day)
 
     print 'Configured feeders:', '\n  '.join([''] + [f.name for f in feeders])
     print 'starting the scheduler'
