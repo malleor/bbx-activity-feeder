@@ -40,11 +40,14 @@ if __name__ == '__main__':
     ]
 
     # run data initializers
-    # fake_datasource = octopus_feeds.FakeDataSource(octopus)
-    # octopus_feeds.ServicesFeed()(fake_datasource, storage)
-    # octopus_feeds.ExecutionsFeed()(fake_datasource, storage)
-    for day in range(0, -7, -1):
-        jira_feeds.IssueActivityFeed()(jira, storage, day)
+    if 'OCTOPUS_PUT_FAKE_DATA' in os.environ and os.environ['OCTOPUS_PUT_FAKE_DATA'].lower() == 'true':
+        fake_datasource = octopus_feeds.FakeDataSource(octopus)
+        octopus_feeds.ServicesFeed()(fake_datasource, storage)
+        octopus_feeds.ExecutionsFeed()(fake_datasource, storage)
+    if 'BLUEBOX_FETCH_INIT_DATA' in os.environ:
+        data_to_fetch = json.loads(os.environ['BLUEBOX_FETCH_INIT_DATA'])
+        for day in data_to_fetch['days']:
+            jira_feeds.IssueActivityFeed()(jira, storage, day)
 
     print 'Configured feeders:', '\n  '.join([''] + [f.name for f in feeders])
     print 'starting the scheduler'

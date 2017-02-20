@@ -55,7 +55,7 @@ class JiraConnector(object):
         else:
             return r.json()
 
-    def get_issues(self, jql, fields=None, changelog=False, verbose=False):
+    def get_issues(self, jql, fields=None, changelog=False, verbose=False, maxResults=None):
 
         # form a request
         params = {
@@ -63,7 +63,8 @@ class JiraConnector(object):
             'fields': ','.join(fields or ['key']),
             'fieldsByKeys': True,
             'startAt': 0,
-            'expand': 'changelog' if changelog  else ''
+            'maxResults': maxResults if maxResults else 50,
+            'expand': 'changelog' if changelog else ''
         }
         if verbose:
             print 'prepared the request:'
@@ -75,7 +76,7 @@ class JiraConnector(object):
         if result is None:
             print 'failed to fetch issues'
             return []
-        total = result['total']
+        total = result['total'] if not maxResults else maxResults
         issues = result['issues']
         if verbose:
             print 'fetched %d of %d issues' % (len(issues), total)

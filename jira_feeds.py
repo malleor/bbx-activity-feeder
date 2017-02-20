@@ -8,6 +8,10 @@ from dateutil.parser import parse as parse_date
 PROJECT_NAME = os.environ['JIRA_PROJECT']
 
 
+def _date_to_epoch(dt):
+    return 1000*int(time.mktime(dt.timetuple()))
+
+
 class CreatedIssuesFeed(object):
     def __init__(self):
         self.index = PROJECT_NAME.lower()
@@ -41,7 +45,7 @@ class CreatedIssuesFeed(object):
             jira_fields = jira_issue['fields']
             created_str = jira_fields['created'][:-5]
             created_date = datetime.strptime(created_str, '%Y-%m-%dT%H:%M:%S.%f')
-            created_epoch = 1000*int(time.mktime(created_date.timetuple()))
+            created_epoch = _date_to_epoch(created_date)
 
             self.created = created_epoch
             self.issue_key = jira_issue['key']
@@ -119,21 +123,22 @@ class IssueActivityFeed(object):
         self.JIRA_MAPPING = {
         }
 
-    def __call__(self, jira, storage, day=''):
+    def __call__(self, jira, storage, day=0):
         # assert that the storage is ready for receiving docs
         if not storage.assert_mapping(self.index, self.type, self.ELASTIC_MAPPING):
             print 'mapping not set; dropping the feed'
             sys.stdout.flush()
             return
 
-        jql = 'project=%s and created>=startofday(%s) and created<endofday(%s)' % (PROJECT_NAME, day, day)
+        jql = 'project=%s and updated>=startofday(%s) and updated<endofday(%s)' % (PROJECT_NAME, day, day)
         issues = jira.get_issues(jql=jql,
-                                 fields=['created', 'assignee'],
+                                 fields=['created', 'assignee', 'updated'],
                                  changelog=True,
                                  verbose=True)
 
         total_activities = 0
-        for issue in issues:
+        most_ancient_update = min([_date_to_epoch(parse_date(issue['fields']['updated'])) for issue in issues])
+        for iix, issue in enumerate(issues):
             key = issue['key']
             try:
                 last_assignee = issue['fields']['assignee']['name']
@@ -182,19 +187,25 @@ class IssueActivityFeed(object):
             previous = created
             for h in history:
                 h['last'], previous = previous, h['created']
-                h['created'] = 1000*int(time.mktime(h['created'].timetuple()))
-                h['last'] = 1000*int(time.mktime(h['last'].timetuple()))
+                h['created'] = _date_to_epoch(h['created'])
+                h['last'] = _date_to_epoch(h['last'])
 
             # for h in history:
             #     print h['timestamp']-h['previous'], h['assignee'], h['from'], 'to', h['to']
+            # sys.stdout.flush()
 
             # store
             for ix, h in enumerate(history):
+                if h['created'] < most_ancient_update:
+                    continue
+
                 res = storage.put(self.index, self.type, '%s@%d' % (h['key'], ix), h)
                 if res is None:
                     print 'ERROR dealing with change', ix
+
             total_activities += len(history)
-            print 'shoved', len(history), 'entries for issue', key
+            print 'shoved', len(history), 'entries for issue', key, '  (%d/%d)' % (1+iix, len(issues))
             sys.stdout.flush()
+
         print 'shoved', total_activities, 'entries for', len(issues), 'issues'
         sys.stdout.flush()
