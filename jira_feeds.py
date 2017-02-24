@@ -123,20 +123,13 @@ class IssueActivityFeed(object):
         self.JIRA_MAPPING = {
         }
 
-    def __call__(self, jira, storage, day=0):
-        # assert that the storage is ready for receiving docs
-        if not storage.assert_mapping(self.index, self.type, self.ELASTIC_MAPPING):
-            print 'mapping not set; dropping the feed'
-            sys.stdout.flush()
-            return
+    def get_issue_activity(self, jira, jql):
 
-        jql = 'project=%s and updated>=startofday(%s) and updated<endofday(%s)' % (PROJECT_NAME, day, day)
         issues = jira.get_issues(jql=jql,
                                  fields=['created', 'assignee', 'updated'],
                                  changelog=True,
                                  verbose=True)
 
-        total_activities = 0
         most_ancient_update = min([_date_to_epoch(parse_date(issue['fields']['updated'])) for issue in issues])
         for iix, issue in enumerate(issues):
             key = issue['key']
@@ -194,6 +187,18 @@ class IssueActivityFeed(object):
             #     print h['timestamp']-h['previous'], h['assignee'], h['from'], 'to', h['to']
             # sys.stdout.flush()
 
+            yield key, history, most_ancient_update
+
+    def __call__(self, jira, storage, day=0):
+        # assert that the storage is ready for receiving docs
+        if not storage.assert_mapping(self.index, self.type, self.ELASTIC_MAPPING):
+            print 'mapping not set; dropping the feed'
+            sys.stdout.flush()
+            return
+
+        jql = 'project=%s and updated>=startofday(%s) and updated<endofday(%s)' % (PROJECT_NAME, day, day)
+        total_activities = 0
+        for _, history, most_ancient_update in self.get_issue_activity(jira, jql):
             # store
             for ix, h in enumerate(history):
                 if h['created'] < most_ancient_update:

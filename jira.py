@@ -60,7 +60,7 @@ class JiraConnector(object):
         # form a request
         params = {
             'jql': jql,
-            'fields': ','.join(fields or ['key']),
+            'fields': ','.join([] if fields == 'all' else (fields or ['key'])),
             'fieldsByKeys': True,
             'startAt': 0,
             'maxResults': maxResults if maxResults else 50,
