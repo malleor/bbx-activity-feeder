@@ -129,6 +129,9 @@ class IssueActivityFeed(object):
                                  fields=['created', 'assignee', 'updated'],
                                  changelog=True,
                                  verbose=True)
+        return self.extract_issue_activity(issues)
+
+    def extract_issue_activity(self, issues):
 
         most_ancient_update = min([_date_to_epoch(parse_date(issue['fields']['updated'])) for issue in issues])
         for iix, issue in enumerate(issues):

@@ -3,6 +3,7 @@ from collections import Counter
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder
 IssueActivityFeed = __import__('../jira_feeds')['IssueActivityFeed']
+from datetime import datetime, timedelta
 
 
 transitions = [
@@ -73,7 +74,8 @@ feature_fields = {
     'issue type': 'customfield_10748',
     'issue subtype': 'customfield_10722',
 }
-issue_fields = sum([j.get_issues(','.join(ik[n:m]).join(['key in (',')']), verbose=True, fields=feature_fields.values()) for n, m in zip(range(0,len(ik),100),range(100,100+len(ik),100))], [])
+# issue_fields = sum([j.get_issues(','.join(ik[n:m]).join(['key in (',')']), verbose=True, fields=feature_fields.values()) for n, m in zip(range(0,len(ik),100),range(100,100+len(ik),100))], [])
+issue_fields = sum([j.get_issues(','.join(ik[n:m]).join(['key in (',')']), verbose=True, fields='all') for n, m in zip(range(0,len(ik),100),range(100,100+len(ik),100))], [])
 field_value_defs = dict([(name, list(set([i['fields'][cf] for i in issue_fields]))) for name, cf in feature_fields.iteritems()])
 field_values = dict([(name, np.array([field_value_defs[name].index(i['fields'][cf]) for i in issue_fields])) for name, cf in feature_fields.iteritems()])
 cat_features = np.array([field_values[_feat] for _feat in feature_fields.keys()]).T
@@ -82,7 +84,7 @@ flut = dict(zip([i['key'] for i in issue_fields], cat_features))
 fields = np.array([flut[key] for key in ik])
 
 
-def get_all_fields(jql):
+def get_all_fields(j, jql):
     for issue in j.get_issues(jql, changelog=True, verbose=True, fields='all'):
         yield issue['key'], dict([(n, v) for n, v in issue['fields'].iteritems() if n.find('customfield') == 0])
 

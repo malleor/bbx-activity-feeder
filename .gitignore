@@ -46,3 +46,4 @@ fabric.properties
 *.pyd
 
 env.list
+*.dot
